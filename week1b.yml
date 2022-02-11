@@ -1,0 +1,149 @@
+# A description of what your template does.
+Description: My first VPC (10.0.0.0/16) with a public subnet (10.0.10.0/24).
+# Parameters you can set in CloudFormation when you roll out your stack.
+Parameters:
+  VPCCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC.
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetACIDR:
+    Description: Please enter the IP range (CIDR notation) for the public A subnet
+    Type: String
+    Default: 10.0.1.0/24
+  PublicSubnetBCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public B subnet
+    Type: String
+    Default: 10.0.2.0/24
+  PrivateSubnetACIDR:
+    Description: Please enter the IP range (CIDR notation) for the private A subnet
+    Type: String
+    Default: 10.0.51.0/24
+  PrivateSubnetBCIDR:
+    Description: Please enter the IP range (CIDR notation) for the private B subnet
+    Type: String
+    Default: 10.0.52.0/24
+  SSHKey:
+    Description: Please enter key name.
+    Type: String
+    Default: MyAWSKey
+  AvailabilityZoneA:
+    Type: String
+    Default: us-east-1a
+  AvailabilityZoneB:
+    Type: String
+    Default: us-east-1b
+
+
+# The cloud resources your template is going to create.
+Resources:
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      Tags: # Good practice is to add tags!
+        - Key: Name
+          Value: Week1bVPC
+
+  PublicASubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PublicSubnetACIDR
+      AvailabilityZone: !Ref AvailabilityZoneA
+      MapPublicIpOnLaunch: yes # Important! See documentation.
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PublicASubnet
+
+  PublicBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PublicSubnetBCIDR
+      AvailabilityZone: !Ref AvailabilityZoneB
+      MapPublicIpOnLaunch: yes # Important! See documentation.
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PublicBSubnet
+  
+  PrivateASubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZoneA
+      CidrBlock: !Ref PrivateSubnetACIDR
+      MapPublicIpOnLaunch: yes # Important! See documentation.
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PrivateASubnet
+  
+  PrivateBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZoneB
+      CidrBlock: !Ref PrivateSubnetBCIDR
+      MapPublicIpOnLaunch: yes # Important! See documentation.
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PrivateBSubnet
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Week1bGateway   
+
+  GatewayAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Week1bTable   
+
+  MyRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+ 
+  SubnetARouteAss:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref PublicASubnet
+
+  SubnetBRouteAss:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref PublicBSubnet
+
+  MySG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Webserver SG
+      GroupName: Webserver SG
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0 
+      Tags: 
+        - Key: Name
+          Value: Week1aSG
+      VpcId: !Ref VPC
