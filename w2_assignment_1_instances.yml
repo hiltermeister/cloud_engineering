@@ -1,0 +1,152 @@
+Description: Launch instances
+Parameters:
+  SSHKey:
+    Description: Please enter key name.
+    Type: String
+    Default: MyAWSKey
+  StackName:
+    Description: Please enter name of Base Stack
+    Type: String
+    Default: MyBase
+
+Resources:
+
+  WebserverSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: WebserverSG
+      GroupName: WebserverSG
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0 
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0 
+      Tags: 
+        - Key: Name
+          Value: WebserverSG
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${StackName}:VPC"
+
+  Webserver01:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref SSHKey
+      ImageId: ami-033b95fb8079dc481
+      InstanceType: t2.micro
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: 
+            Fn::ImportValue:
+              !Sub "${StackName}:MyFirstSubnet"
+          GroupSet: 
+            - Ref: WebserverSG
+      Tags:
+        - Key: Name
+          Value: Webserver1
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum install -y git
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+          . /.nvm/nvm.sh
+          nvm install node
+          cd /root
+          git clone https://github.com/TimothySealy/cac-simple-webapp.git
+          cd cac-simple-webapp 
+          npm install
+          npm run start
+          cat << EOF > /etc/systemd/system/simplewebapp.service
+          [Unit]
+          Description=My app
+
+          [Service]
+          ExecStart=/.nvm/versions/node/v17.5.0/bin/node /root/cac-simple-webapp/app.js
+          Restart=always
+          User=root
+          # Note Debian/Ubuntu uses 'nogroup', RHEL/Fedora uses 'nobody'
+          Group=root
+          WorkingDirectory=/root/cac-simple-webapp
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          systemctl enable simplewebapp.service
+          systemctl start simplewebapp.service
+
+  Webserver02:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref SSHKey
+      ImageId: ami-033b95fb8079dc481
+      InstanceType: t2.micro
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: 
+            Fn::ImportValue:
+              !Sub "${StackName}:MySecondSubnet"
+          GroupSet: 
+            - Ref: WebserverSG
+      Tags:
+        - Key: Name
+          Value: Webserver2
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum install -y git
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+          . /.nvm/nvm.sh
+          nvm install node
+          cd /root
+          git clone https://github.com/TimothySealy/cac-simple-webapp.git
+          cd cac-simple-webapp 
+          npm install
+          npm run start
+          cat << EOF > /etc/systemd/system/simplewebapp.service
+          [Unit]
+          Description=My app
+
+          [Service]
+          ExecStart=/.nvm/versions/node/v17.5.0/bin/node /root/cac-simple-webapp/app.js
+          Restart=always
+          User=root
+          # Note Debian/Ubuntu uses 'nogroup', RHEL/Fedora uses 'nobody'
+          Group=root
+          WorkingDirectory=/root/cac-simple-webapp
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          systemctl enable simplewebapp.service
+          systemctl start simplewebapp.service
+
+# Define outputs so values can be imported in another template
+Outputs:
+
+  WebserverSGRef:
+    Description: Reference to the Webserver Security Group
+    Value: !Ref WebserverSG
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", WebserverSG ] ]
+
+  Webserver01Ref:
+    Description: Reference to the Webserver01
+    Value: !Ref Webserver01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", Webserver01 ] ]
+
+  Webserver02Ref:
+    Description: Reference to the Webserver02
+    Value: !Ref Webserver02
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", Webserver02 ] ] 
