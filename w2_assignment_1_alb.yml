@@ -1,0 +1,38 @@
+Parameters:
+  BaseStackName:
+    Description: Please enter name of Base Stack
+    Type: String
+    Default: MyBase
+  InstanceStackName:
+    Description: Please enter name of Instance Stack
+    Type: String
+    Default: MyInstances
+
+Resources:
+
+  TargetGroupLB:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckPort: 3000
+      HealthCheckIntervalSeconds: 10
+      HealthCheckProtocol: TCP
+      UnhealthyThresholdCount: 3
+      Name: MyTargets
+      TargetType: instance
+      Protocol: TCP
+      Port: 3000
+      Targets:
+      - Id:
+          Fn::ImportValue:
+            !Sub "${InstanceStackName}:Webserver01"
+      - Id:
+          Fn::ImportValue:
+            !Sub '${InstanceStackName}:Webserver02'
+      Tags:
+        - Key: Name
+          Value: WebserverTG
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${BaseStackName}:VPC"
+
