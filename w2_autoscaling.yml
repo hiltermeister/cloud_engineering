@@ -25,10 +25,10 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 3000
-          ToPort: 3000
-          CidrIp: 0.0.0.0/0
+            #- IpProtocol: tcp
+            #FromPort: 00
+            #ToPort: 80
+            #CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: WebserverSG
@@ -39,30 +39,25 @@ Resources:
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer 
     Properties:
-      Scheme: internet-facing
-      Type: network
+      #Scheme: internet-facing
+      #Type: application 
       Name: MyWebLoadbalancer
-      IpAddressType: ipv4
-      SubnetMappings:
-      - SubnetId:
-          Fn::ImportValue:
+        #IpAddressType: ipv4
+      SecurityGroups:
+      - !Ref WebserverSG
+      Subnets:
+        - Fn::ImportValue:
             !Sub "${BaseStackName}:MyFirstSubnet"
-      - SubnetId: 
-          Fn::ImportValue:
+        - Fn::ImportValue:
             !Sub "${BaseStackName}:MySecondSubnet"
 
   TargetGroupLB:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HealthCheckEnabled: true
-      HealthCheckPort: 3000
-      HealthCheckIntervalSeconds: 10
-      HealthCheckProtocol: TCP
-      UnhealthyThresholdCount: 3
       Name: MyTargets
       TargetType: instance
-      Protocol: TCP
-      Port: 3000
+      Protocol: HTTP
+      Port: 80
       Tags:
         - Key: Name
           Value: WebserverTG
@@ -77,13 +72,13 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref TargetGroupLB
       LoadBalancerArn: !Ref LoadBalancer
-      Port: 3000
-      Protocol: TCP
+      Port: 80
+      Protocol: HTTP
 
   MyLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties: 
-      AssociatePublicIpAddress: true
+      AssociatePublicIpAddress: false
       ImageId: ami-033b95fb8079dc481
       InstanceType: t2.micro
       KeyName: !Ref SSHKey
@@ -107,6 +102,7 @@ Resources:
           Description=My app
 
           [Service]
+          Environment="PORT=80"
           ExecStart=/.nvm/versions/node/v17.5.0/bin/node /root/cac-simple-webapp/app.js
           Restart=always
           User=root
@@ -127,7 +123,8 @@ Resources:
       MinSize: "1"
       MaxSize: "3"
       DesiredCapacity: "1"
-      HealthCheckGracePeriod: 60
+        #HealthCheckGracePeriod: 50
+      Cooldown: 120
       VPCZoneIdentifier:
         - Fn::ImportValue:
             !Sub "${BaseStackName}:MyFirstSubnet"
@@ -145,5 +142,9 @@ Resources:
       TargetTrackingConfiguration:
         PredefinedMetricSpecification:
           PredefinedMetricType: ALBRequestCountPerTarget
+          ResourceLabel: !Join
+            - '/'
+            - - !GetAtt LoadBalancer.LoadBalancerFullName
+              - !GetAtt TargetGroupLB.TargetGroupFullName
         TargetValue: 5
 
