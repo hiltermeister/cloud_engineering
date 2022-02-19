@@ -1,0 +1,171 @@
+Description: My Autoscaling Stack
+Parameters:
+  SSHKey:
+    Description: Please enter key name.
+    Type: String
+    Default: MyAWSKey
+  BaseStackName:
+    Description: Please enter name of Base Stack
+    Type: String
+    Default: MyBase
+
+Resources:
+  
+  WebserverSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: WebserverSG
+      GroupName: WebserverSG
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: WebserverSG
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${BaseStackName}:VPC"
+
+  LoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: LoadBalancerSG
+      GroupName: LoadBalancerSG
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: LoadBalancerSG
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${BaseStackName}:VPC"
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer 
+    Properties:
+      #Scheme: internet-facing
+      #Type: application 
+      Name: MyWebLoadbalancer
+        #IpAddressType: ipv4
+      SecurityGroups:
+      - !Ref LoadBalancerSG
+      Subnets:
+        - Fn::ImportValue:
+            !Sub "${BaseStackName}:MyFirstSubnet"
+        - Fn::ImportValue:
+            !Sub "${BaseStackName}:MySecondSubnet"
+
+  TargetGroupLB:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: MyTargets
+      TargetType: instance
+      Protocol: HTTP
+      Port: 3000
+      Tags:
+        - Key: Name
+          Value: WebserverTG
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${BaseStackName}:VPC"
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupLB
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 3000
+      Protocol: HTTP
+
+  MyLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties: 
+      AssociatePublicIpAddress: true 
+      ImageId: ami-033b95fb8079dc481
+      InstanceType: t2.micro
+      KeyName: !Ref SSHKey
+      LaunchConfigurationName: WebserverLC
+      SecurityGroups:
+        - !Ref WebserverSG
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum install -y git
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+          . /.nvm/nvm.sh
+          nvm install node
+          cd /root
+          git clone https://github.com/TimothySealy/cac-simple-webapp.git
+          cd cac-simple-webapp 
+          npm install
+          npm run start
+          cat << EOF > /etc/systemd/system/simplewebapp.service
+          [Unit]
+          Description=My app
+
+          [Service]
+          ExecStart=/.nvm/versions/node/v17.5.0/bin/node /root/cac-simple-webapp/app.js
+          Restart=always
+          User=root
+          # Note Debian/Ubuntu uses 'nogroup', RHEL/Fedora uses 'nobody'
+          Group=root
+          WorkingDirectory=/root/cac-simple-webapp
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          systemctl enable simplewebapp.service
+          systemctl start simplewebapp.service
+    
+  MyAutoscalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: MyAutoscalingGroup
+      MinSize: "1"
+      MaxSize: "3"
+      DesiredCapacity: "1"
+        #HealthCheckGracePeriod: 50
+      Cooldown: 120
+      VPCZoneIdentifier:
+        - Fn::ImportValue:
+            !Sub "${BaseStackName}:MyFirstSubnet"
+        - Fn::ImportValue:
+            !Sub "${BaseStackName}:MySecondSubnet"
+      LaunchConfigurationName: !Ref MyLaunchConfiguration
+      TargetGroupARNs: 
+        - !Ref TargetGroupLB
+ 
+  MyScalingPolicy: 
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties: 
+      AutoScalingGroupName: !Ref MyAutoscalingGroup 
+      Cooldown: 60
+      EstimatedInstanceWarmup: 200
+      PolicyType: TargetTrackingScaling 
+      TargetTrackingConfiguration:
+       PredefinedMetricSpecification:
+          PredefinedMetricType: ALBRequestCountPerTarget
+          ResourceLabel: !Join 
+            - '/' 
+            - - !GetAtt LoadBalancer.LoadBalancerFullName
+              - !GetAtt TargetGroupLB.TargetGroupFullName
+       TargetValue: 1.0
+    DependsOn:
+      - MyAutoscalingGroup
+      - MyLaunchConfiguration
+      - LoadBalancer
+      - LoadBalancerListener
+      - TargetGroupLB
+      - WebserverSG
+      - LoadBalancerSG
