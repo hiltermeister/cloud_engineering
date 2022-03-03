@@ -1,0 +1,71 @@
+  Parameters:
+    DefaultStackName:
+      Description: Please enter name of Base StackName
+      Type: String
+      Default: MyBase
+  
+    InstanceStackName:
+      Description: Name of Instance StackName
+      Type: String
+      Default: EC2-SG
+  
+  Resources:
+  # Load Balancer
+    MyLoadBalancer:
+      Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+      Properties:
+        Type: application
+        IpAddressType: ipv4
+        Name: MyLoadBalancer
+        Scheme: internet-facing
+        SecurityGroups: 
+        - Fn::ImportValue: 
+            !Sub "${InstanceStackName}:MySG"
+        SubnetMappings:
+          - SubnetId: 
+              Fn::ImportValue: 
+               !Sub "${DefaultStackName}:MyFirstSubnet"
+          - SubnetId:
+              Fn::ImportValue:
+               !Sub "${DefaultStackName}:MySecondSubnet"
+        Tags:
+          - Key: Name
+            Value: Load Balancer
+  
+    MyLoadBalancerTargetGroup:
+      Type: AWS::ElasticLoadBalancingV2::TargetGroup
+      Properties:
+        HealthCheckEnabled: true
+        HealthCheckPort: 3000
+        HealthCheckIntervalSeconds: 10
+        HealthCheckProtocol: HTTP
+        UnhealthyThresholdCount: 3
+        Name: MyTargets
+        TargetType: instance
+        Protocol: HTTP
+        Port: 3000
+        Targets:
+        - Id:
+            Fn::ImportValue:
+              !Sub "${InstanceStackName}:MyEC2Instance1"
+        - Id:
+            Fn::ImportValue:
+              !Sub '${InstanceStackName}:MyEC2Instance2'
+        Tags:
+          - Key: Name
+            Value: WebserverTG
+        VpcId:
+          Fn::ImportValue:
+            !Sub "${DefaultStackName}:VPC"
+
+    MyLoadBalancerListener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+        DefaultActions:
+          - Type: forward
+            TargetGroupArn: !Ref MyLoadBalancerTargetGroup
+        LoadBalancerArn: !Ref MyLoadBalancer
+        Port: 3000
+        Protocol: HTTP
+
+   

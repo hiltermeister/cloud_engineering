@@ -1,0 +1,58 @@
+Description: Create NAT Gateway
+Parameters:
+  SSHKey:
+    Description: Please enter key name.
+    Type: String
+    Default: Webserver
+  BaseStackName:
+    Description: Please enter name of Base Stack
+    Type: String
+    Default: MyBase
+  InstanceStackName:
+    Description: Please enter name of Instance Stack
+    Type: String
+    Default: Instances
+
+Resources:
+
+  MyFirstPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: 
+        Fn::ImportValue:
+          !Sub "${BaseStackName}:VPC"
+      Tags:
+        - Key: Name
+          Value: MyFirstPrivateRouteTable
+
+  MyFirstPrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MyFirstPrivateRouteTable
+      SubnetId:
+        Fn::ImportValue:
+          !Sub "${BaseStackName}:MyFirstPrivateSubnet"
+
+  MyEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      ConnectivityType: public
+      SubnetId:
+        Fn::ImportValue:
+          !Sub "${BaseStackName}:MyFirstSubnet"
+      AllocationId: !GetAtt MyEIP.AllocationId
+      Tags:
+      - Key: Name
+        Value: MyNATgateway
+
+  NATRoute:
+   Type: AWS::EC2::Route
+   Properties:
+     RouteTableId: !Ref MyFirstPrivateRouteTable
+     DestinationCidrBlock: 0.0.0.0/0
+     NatGatewayId: !Ref NATGateway

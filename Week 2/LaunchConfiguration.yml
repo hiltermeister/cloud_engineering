@@ -1,0 +1,141 @@
+Description: Launch Configurations
+Parameters:
+  SSHKey:
+    Description: SSH Key to use with this Launch Configurations
+    Type: String
+    Default: Webserver
+  StackName: 
+    Description: Basic StackName for this template
+    Type: String
+    Default: MyBase
+  ALBRequestCountTargetValue:
+    Type: String
+
+Resources:
+
+  MyEC2SG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: MyEC2SG
+      GroupName: MyEC2SG
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0 
+      Tags: 
+        - Key: Name
+          Value: MyEC2SG
+      VpcId: 
+        Fn::ImportValue:
+          'Fn::Sub': "${StackName}:VPC"
+
+  MyLBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: MyLBSG
+      GroupName: MyLBSG
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0 
+      Tags: 
+        - Key: Name
+          Value: MyLBSG
+      VpcId: 
+        Fn::ImportValue:
+          'Fn::Sub': "${StackName}:VPC"
+
+  MyLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: MyLoadBalancer
+      Subnets:
+        - Fn::ImportValue:
+            'Fn::Sub': "${StackName}:MyFirstSubnet"
+        - Fn::ImportValue:
+            'Fn::Sub': "${StackName}:MySecondSubnet"
+      SecurityGroups: 
+        - !Ref MyLBSG
+      Tags:
+        - Key: Name
+          Value: Load Balancer
+  
+  MyLoadBalancerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: MyTargets
+      VpcId: 
+        Fn::ImportValue:
+          'Fn::Sub': "${StackName}:VPC"
+      Protocol: HTTP
+      Port: 80
+
+  MyLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref MyLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref MyLoadBalancerTargetGroup
+
+  MyLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-033b95fb8079dc481
+      InstanceType: t2.micro
+      KeyName: !Ref SSHKey
+      SecurityGroups:
+        - !Ref MyEC2SG
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum install -y httpd
+          sudo systemctl start httpd
+          sudo systemctl enable httpd
+
+  MyAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: MyAutoScalingGroup
+      MinSize: "1"
+      MaxSize: "3"
+      HealthCheckGracePeriod: 60
+      DesiredCapacity: "1"
+      LaunchConfigurationName: !Ref MyLaunchConfiguration
+      VPCZoneIdentifier:
+        - Fn::ImportValue:
+            'Fn::Sub': "${StackName}:MyFirstSubnet"
+        - Fn::ImportValue:
+            'Fn::Sub': "${StackName}:MySecondSubnet"
+      TargetGroupARNs:
+        - !Ref MyLoadBalancerTargetGroup
+  
+  MyAutoScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref MyAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ALBRequestCountPerTarget
+          ResourceLabel: !Join 
+            - '/' 
+            - - !GetAtt MyLoadBalancer.LoadBalancerFullName
+              - !GetAtt MyLoadBalancerTargetGroup.TargetGroupFullName
+        TargetValue: !Ref ALBRequestCountTargetValue
+    DependsOn:
+    - MyAutoScalingGroup
+    - MyLaunchConfiguration
+    - MyLoadBalancerListener
+    - MyLoadBalancerTargetGroup
+    - MyLoadBalancer
+    - MyEC2SG
+    - MyLBSG

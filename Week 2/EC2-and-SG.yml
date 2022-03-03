@@ -1,0 +1,102 @@
+Parameters:
+  SSHKey:
+    Description: Webserver-SSH-Key.
+    Type: String
+    Default: Webserver
+  StackName:
+    Description: Please enter name of Base StackName
+    Type: String
+    Default: MyBase1
+
+Resources:
+  # Security Group
+  MySG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: MySG
+      GroupName: MySG
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0 
+      Tags: 
+        - Key: Name
+          Value: Week1SG
+      VpcId: !ImportValue
+        'Fn::Sub': "${StackName}:VPC"
+
+  # EC2 Instances 
+  MyEC2Instance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref SSHKey
+      ImageId: ami-033b95fb8079dc481
+      InstanceType: t2.micro
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !ImportValue
+            'Fn::Sub': "${StackName}:MyFirstSubnet"
+          GroupSet: 
+            - !Ref MySG
+      Tags:
+        - Key: Name
+          Value: MyEC2Instance1
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          sudo yum -y update
+          sudo yum -y install git
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+          . ~/.nvm/nvm.sh
+          nvm install node
+          git clone https://github.com/TimothySealy/cac-simple-webapp.git
+          cd cac-simple-webapp
+          npm install
+          npm run start
+
+  MyEC2Instance2:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref SSHKey
+      ImageId: ami-033b95fb8079dc481
+      InstanceType: t2.micro
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !ImportValue
+            'Fn::Sub': "${StackName}:MySecondSubnet"
+          GroupSet: 
+            - Ref: MySG
+      Tags:
+        - Key: Name
+          Value: MyEC2Instance2
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum install -y httpd
+          sudo systemctl start
+# Define outputs so values can be imported in another template
+Outputs:
+  MySG:
+    Description: Security Group for Simple Webserver 1
+    Value: !Ref MySG
+    Export: 
+      Name: !Join [ ":", [ !Ref "AWS::StackName", MySG ] ]
+  
+  MyEC2Instance1:
+    Description: First EC2 Instance for the Simple Webserver
+    Value: !Ref MyEC2Instance1
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", MyEC2Instance1]]
+  
+  MyEC2Instance2:
+    Description: Second EC2 Instance for the Simple Webserver
+    Value: !Ref MyEC2Instance2
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", MyEC2Instance2]]

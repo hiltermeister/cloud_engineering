@@ -1,0 +1,111 @@
+# A description of what your template does.
+Description: My first VPC (10.0.0.0/16) with a public subnet (10.0.10.0/24).
+# Parameters you can set in CloudFormation when you roll out your stack.
+Parameters:
+  VPCCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC.
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet
+    Type: String
+    Default: 10.0.10.0/24
+  SSHKey:
+    Description: Please enter key name.
+    Type: String
+    Default: Webserver
+
+# The cloud resources your template is going to create.
+Resources:
+  MyFirstVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      Tags: # Good practice is to add tags!
+        - Key: Name/;'.'
+          Value: Week1VPC
+
+  MyFirstSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PublicSubnetCIDR
+      MapPublicIpOnLaunch: yes # Important! See documentation.
+      VpcId: !Ref MyFirstVPC
+      Tags:
+        - Key: Name
+          Value: Week1Subnet
+
+  MyInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Week1Gateway   
+
+  MyGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref MyInternetGateway
+      VpcId: !Ref MyFirstVPC
+
+  MyFirstRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyFirstVPC
+      Tags:
+        - Key: Name
+          Value: Week1Table   
+
+  MyRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref MyFirstRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref MyInternetGateway
+ 
+  MySubnetRouteAss:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref MyFirstRouteTable
+      SubnetId: !Ref MyFirstSubnet
+
+  MySG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Webserver SG
+      GroupName: Webserver SG
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0 
+      Tags: 
+        - Key: Name
+          Value: Week1SG
+      VpcId: !Ref MyFirstVPC
+
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref SSHKey
+      ImageId: ami-033b95fb8079dc481
+      InstanceType: t2.micro
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !Ref MyFirstSubnet
+          GroupSet: 
+            - Ref: MySG
+      Tags:
+        - Key: Name
+          Value: Week1EC2
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          sudo yum update
+          
+          
